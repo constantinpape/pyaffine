@@ -26,10 +26,38 @@ def interpolate(input_, coord, order):
     return input_[rounded_coord]
 
 
-# TODO what we do with the new shape does not make much sense (shifts don't have any effect).
-# we need to define the input and output coordinate systems
-# and their relation through the world coordinate system somehow
-def apply_affine_transformation(a, matrix, order=0, fill_value=0.):
+def transform_shape(shape, matrix, transform_coordinate):
+    dim = len(shape)
+    corners = [(0, 0), (shape[0], 0), (0, shape[1]), shape]
+    transformed_corners = [transform_coordinate(corner, matrix)
+                           for corner in corners]
+    starts = [min(corner[d] for corner in transformed_corners) for d in range(dim)]
+    stops = [max(corner[d] for corner in transformed_corners) for d in range(dim)]
+    out_shape = tuple(int(sto - sta) for sta, sto in zip(starts, stops))
+    return out_shape, starts
+
+
+# TODO implement interpolation orders:
+# 0: nearest
+# 1: linear
+# 2: quadratic
+# 3: cubic
+def apply_affine_transformation(a, matrix, order=0, fill_value=0.,
+                                output_shape=None, origin=None):
+    """ Apply affine transformation to 2d or 3d input.
+
+    Arguments:
+        a [np.ndarray] - input array, must be 2d or 3d
+        matrix [np.ndarray] - affine matrix,
+            must be (3, 3) for 2d and (4, 4) for 3d
+        order [int] - interpolation order
+            0 = nearest interpolation, 1 = linear interpolation (default: 0)
+        output_shape [tuple]: shape for the ouput,
+            by default uses the full extent after transformation (default: None)
+        origin [listlike]: origin of the output relative to input origin
+            by default uses the transformed origin (default: None)
+    """
+
     adim = a.ndim
     mdim = matrix.shape[0] - 1
     # TODO only support 2d for now
@@ -40,27 +68,33 @@ def apply_affine_transformation(a, matrix, order=0, fill_value=0.):
 
     transform_coordinate = transform_coordinate_2d if dim == 2 else transform_coordinate_3d
 
-    # get the inverse matrix
+    # TODO handle singular matrix here
+    # get the inverse affine matrix
     inv_matrix = np.linalg.inv(matrix)
 
-    # find the output shape by transforming the corners of a
+    # find the extent of the transformed image and the position
+    # of the left corner w.r.t the pre-transformed left corner
     shape = a.shape
-    corners = [(0, 0), (shape[0], 0), (0, shape[1]), shape]
-    transformed_corners = [transform_coordinate(corner, matrix)
-                           for corner in corners]
-    starts = [min(corner[d] for corner in transformed_corners) for d in range(dim)]
-    stops = [max(corner[d] for corner in transformed_corners) for d in range(dim)]
-    out_shape = tuple(int(sto - sta) for sta, sto in zip(starts, stops))
+    # extent, offset = transform_shape(shape, matrix, transform_coordinate)
+    extent, offset = transform_shape(shape, inv_matrix, transform_coordinate)
+
+    # if the oputput shae was not specified, set it to the full extent
+    if output_shape is None:
+        output_shape = extent
+
+    # if the new origin was not specified, set it to the offset
+    if origin is None:
+        origin = offset
 
     # make output array
-    b = np.zeros(out_shape)
+    b = np.zeros(output_shape)
 
     # iterate over all pixels of `b`, find coordinates in `a` via inv_matrix and interpolate value
     for i in range(b.shape[0]):
         for j in range(b.shape[1]):
-            # we have to add starts here (I think ...) in order to stay in the right coordinate space
-            coord = (i + starts[0], j + starts[1])
-            transformed_coord = transform_coordinate(coord, inv_matrix)
+            # we add the origin here to get to the correct position in the original image
+            coord = (i + origin[0], j + origin[1])
+            transformed_coord = transform_coordinate(coord, matrix)
             if not check_coordinate(transformed_coord, shape):
                 b[i, j] = fill_value
                 continue

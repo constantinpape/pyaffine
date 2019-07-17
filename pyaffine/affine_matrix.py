@@ -77,7 +77,17 @@ def affine_matrix_3d(scale=None, rotation=None, shear=None, shift=None):
     return matrix
 
 
+# TODO shear is not working properly yet
 def affine_matrix(scale=None, rotation=None, shear=None, shift=None):
+    """ Compute 2d or 3d affine matrix.
+
+    Argeuments:
+        scale [listlike]: scale-factor for axes, must have length 2 for 2d / 3 for 3d
+        rotation [listlike]: rotation, single angle in 2d, three euler angles (phi, theta, psi) in 3d,
+            expects degrees
+        shear [listlike]: shear angle, NOT WORKING PROPERLY YET
+        shift [listlike]: shift along axes, must have length 2 for 2d / 3 for 3d
+    """
 
     # validate the input parameters
     parameters = [scale, rotation, shear, shift]
