@@ -1,4 +1,6 @@
 import numpy as np
+# I LOVE SCIPY
+from scipy.ndimage import affine_transform
 
 
 def transform_coordinate_2d(coord, matrix):
@@ -43,7 +45,8 @@ def transform_shape(shape, matrix, transform_coordinate):
 # 2: quadratic
 # 3: cubic
 def apply_affine_transformation(a, matrix, order=0, fill_value=0.,
-                                output_shape=None, origin=None):
+                                output_shape=None, origin=None,
+                                use_scipy=False):
     """ Apply affine transformation to 2d or 3d input.
 
     Arguments:
@@ -77,8 +80,8 @@ def apply_affine_transformation(a, matrix, order=0, fill_value=0.,
     shape = a.shape
 
     # TODO figure out which matrix to use here
-    # extent, offset = transform_shape(shape, matrix, transform_coordinate)
-    extent, offset = transform_shape(shape, inv_matrix, transform_coordinate)
+    extent, offset = transform_shape(shape, matrix, transform_coordinate)
+    # extent, offset = transform_shape(shape, inv_matrix, transform_coordinate)
 
     # if the oputput shae was not specified, set it to the full extent
     if output_shape is None:
@@ -88,22 +91,32 @@ def apply_affine_transformation(a, matrix, order=0, fill_value=0.,
     if origin is None:
         origin = offset
 
-    # make output array
-    b = np.zeros(output_shape)
+    if use_scipy:
+        # we need to adjust the offset for scipy
+        mat_scipy = inv_matrix.copy()
+        mat_scipy[:dim, dim] = origin
 
-    # iterate over all pixels of `b`, find coordinates in `a` via inv_matrix and interpolate value
-    for i in range(b.shape[0]):
-        for j in range(b.shape[1]):
-            # we add the origin here to get to the correct position in the original image
-            coord = (i + origin[0], j + origin[1])
+        b = affine_transform(a, mat_scipy,
+                             output_shape=output_shape, order=order,
+                             cval=fill_value)
 
-            # TODO figure out which matrix to use here
-            # transformed_coord = transform_coordinate(coord, inv_matrix)
-            transformed_coord = transform_coordinate(coord, matrix)
+    else:
+        # make output array
+        b = np.zeros(output_shape)
 
-            if not check_coordinate(transformed_coord, shape):
-                b[i, j] = fill_value
-                continue
-            b[i, j] = interpolate(a, transformed_coord, order)
+        # iterate over all pixels of `b`, find coordinates in `a` via inv_matrix and interpolate value
+        for i in range(b.shape[0]):
+            for j in range(b.shape[1]):
+                # we add the origin here to get to the correct position in the original image
+                coord = (i + origin[0], j + origin[1])
+
+                # TODO figure out which matrix to use here
+                transformed_coord = transform_coordinate(coord, inv_matrix)
+                # transformed_coord = transform_coordinate(coord, matrix)
+
+                if not check_coordinate(transformed_coord, shape):
+                    b[i, j] = fill_value
+                    continue
+                b[i, j] = interpolate(a, transformed_coord, order)
 
     return b
